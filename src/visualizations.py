@@ -117,7 +117,10 @@ def render_charts(holdings: list[dict]):
         expanded = expand_holdings_for_analysis(holdings, price_data)
 
     # Row 1: performance chart (full width)
-    _render_performance_chart(holdings, price_data, benchmark, synthetic_tickers)
+    # Only flag synthetic data for user-added tickers; sub-holdings of ETFs
+    # are not used in the performance line and should not trigger the caption.
+    base_synthetic = [t for t in synthetic_tickers if t in base_tickers]
+    _render_performance_chart(holdings, price_data, benchmark, base_synthetic)
 
     # Row 2: sector + region pies side by side
     col1, col2 = st.columns(2)
