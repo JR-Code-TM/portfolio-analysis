@@ -216,7 +216,7 @@ def _render_sector_pie(expanded_holdings: list[dict]):
         st.info("No sector data available.")
         return
 
-    _render_donut(list(sector_values.keys()), list(sector_values.values()))
+    _render_donut(list(sector_values.keys()), list(sector_values.values()), key="sector_pie")
 
 
 def _render_region_pie(expanded_holdings: list[dict]):
@@ -235,10 +235,10 @@ def _render_region_pie(expanded_holdings: list[dict]):
         st.info("Regional data unavailable. Use Search when adding holdings to populate country data.")
         return
 
-    _render_donut(list(region_values.keys()), list(region_values.values()))
+    _render_donut(list(region_values.keys()), list(region_values.values()), key="region_pie")
 
 
-def _render_donut(names: list[str], values: list[float]):
+def _render_donut(names: list[str], values: list[float], key: str = "donut"):
     template = get_plotly_template()
     bg_color = get_plotly_bg_color()
 
@@ -256,4 +256,4 @@ def _render_donut(names: list[str], values: list[float]):
         legend=dict(orientation="h", yanchor="top", y=-0.05),
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=key)
