@@ -36,6 +36,7 @@ DARK_CSS = """
     [data-testid="stSidebar"] .stButton button {
         white-space: nowrap !important;
     }
+
 </style>
 """
 
@@ -49,6 +50,7 @@ LIGHT_CSS = """
     [data-testid="stSidebar"] .stButton button {
         white-space: nowrap !important;
     }
+
 </style>
 """
 
