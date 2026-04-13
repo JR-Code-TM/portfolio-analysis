@@ -1,13 +1,20 @@
-from typing import TypedDict
+from __future__ import annotations
+
+from typing import Optional, TypedDict
 
 
-class Holding(TypedDict):
+class _HoldingRequired(TypedDict):
     ticker: str
     company_name: str
     sector: str
     shares: float
-    price: float
-    cost_basis: float
+
+
+class Holding(_HoldingRequired, total=False):
+    price: Optional[float]       # None = auto-fetch attempted; still None if yfinance failed
+    cost_basis: Optional[float]  # None = skip gain/loss calculations
+    country: Optional[str]
+    is_etf: bool
 
 
 SECTORS = [

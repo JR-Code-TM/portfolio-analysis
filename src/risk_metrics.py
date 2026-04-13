@@ -1,8 +1,17 @@
+from __future__ import annotations
+
+from typing import Optional, Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from src.market_data import fetch_price_history, fetch_benchmark
+from src.market_data import (
+    fetch_price_history,
+    fetch_benchmark,
+    get_etf_holdings_cached,
+    expand_holdings_for_analysis,
+)
 
 RISK_FREE_RATE_ANNUAL = 0.05
 TRADING_DAYS = 252
@@ -13,18 +22,30 @@ def render_metrics(holdings: list[dict]):
         st.info("No holdings yet. Add holdings using the sidebar.")
         return
 
-    tickers = list({h["ticker"] for h in holdings})
+    # Collect base tickers + ETF sub-tickers for one combined price fetch
+    base_tickers = list({h["ticker"] for h in holdings})
+    sub_tickers = [
+        sub["ticker"]
+        for h in holdings if h.get("is_etf", False)
+        for sub in get_etf_holdings_cached(h["ticker"])
+    ]
+    all_tickers = tuple(set(base_tickers + sub_tickers))
 
-    with st.spinner("Computing risk metrics..."):
-        price_data, synthetic_tickers = fetch_price_history(tickers)
+    with st.spinner("Computing risk metrics…"):
+        price_data, synthetic_tickers = fetch_price_history(all_tickers)
         benchmark = fetch_benchmark()
 
-    if synthetic_tickers:
+    # Expand ETF holdings into virtual sub-holdings for analysis
+    expanded = expand_holdings_for_analysis(holdings, price_data)
+
+    # Only warn about synthetic data for user-visible base tickers
+    user_synthetic = [t for t in synthetic_tickers if t in base_tickers]
+    if user_synthetic:
         st.warning(
-            f"Metrics estimated from simulated price data for: {', '.join(synthetic_tickers)}"
+            f"Metrics estimated from simulated price data for: {', '.join(user_synthetic)}"
         )
 
-    portfolio_returns, bench_returns = _compute_returns(holdings, price_data, benchmark)
+    portfolio_returns, bench_returns = _compute_returns(expanded, price_data, benchmark)
 
     if portfolio_returns is None or len(portfolio_returns) < 20:
         st.error("Not enough return data to compute risk metrics.")
@@ -71,7 +92,7 @@ def _compute_returns(
     holdings: list[dict],
     price_data: dict[str, pd.Series],
     benchmark: pd.Series,
-) -> tuple[pd.Series | None, pd.Series | None]:
+) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
     all_dates = benchmark.index
     for series in price_data.values():
         all_dates = all_dates.union(series.index)
@@ -85,13 +106,24 @@ def _compute_returns(
 
     portfolio_value = pd.Series(0.0, index=all_dates)
     for h in holdings:
-        if h["ticker"] in aligned:
-            portfolio_value += h["shares"] * aligned[h["ticker"]]
+        ticker = h["ticker"]
+        price = h.get("price")
+        if ticker in aligned:
+            portfolio_value += h["shares"] * aligned[ticker]
+        elif price is not None:
+            # Holding has no price history — use constant price (contributes 0 to returns)
+            portfolio_value += h["shares"] * price
 
     portfolio_returns = portfolio_value.pct_change().dropna()
     bench_returns = bench_aligned.pct_change().dropna()
 
+    # Remove inf / extreme values from returns
+    portfolio_returns = portfolio_returns.replace([np.inf, -np.inf], np.nan).dropna()
+    bench_returns = bench_returns.replace([np.inf, -np.inf], np.nan).dropna()
+
     common = portfolio_returns.index.intersection(bench_returns.index)
+    if len(common) < 20:
+        return None, None
     return portfolio_returns.loc[common], bench_returns.loc[common]
 
 
@@ -126,7 +158,6 @@ def _beta_alpha(portfolio_returns: pd.Series, bench_returns: pd.Series) -> tuple
         return 1.0, 0.0
 
     beta = float(cov_matrix[0, 1] / bench_var)
-
     port_annual = float((1 + portfolio_returns.mean()) ** TRADING_DAYS - 1)
     bench_annual = float((1 + bench_returns.mean()) ** TRADING_DAYS - 1)
     alpha = (port_annual - (RISK_FREE_RATE_ANNUAL + beta * (bench_annual - RISK_FREE_RATE_ANNUAL))) * 100

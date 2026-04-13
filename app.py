@@ -11,6 +11,10 @@ def init_session_state():
         st.session_state.theme = "light"
     if "price_cache" not in st.session_state:
         st.session_state.price_cache = {}
+    if "ticker_info_cache" not in st.session_state:
+        st.session_state.ticker_info_cache = {}
+    if "etf_holdings_cache" not in st.session_state:
+        st.session_state.etf_holdings_cache = {}
 
 
 def main():
