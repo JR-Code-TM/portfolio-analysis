@@ -254,6 +254,12 @@ def _render_donut(names: list[str], values: list[float], key: str = "donut"):
         height=380,
         showlegend=True,
         legend=dict(orientation="h", yanchor="top", y=-0.05),
+        # Embed the chart key in the layout meta so the serialised plotly spec
+        # differs between sector and region charts even when both charts happen
+        # to produce identical data (e.g. everything maps to "Other").
+        # Without this, Streamlit 1.50 computes the same element-id hash for
+        # both charts and raises StreamlitDuplicateElementId.
+        meta={"chart_key": key},
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")
     st.plotly_chart(fig, use_container_width=True, key=key)
