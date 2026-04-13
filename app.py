@@ -72,15 +72,14 @@ def main():
 """)
         return
 
-    tab1, tab2, tab3 = st.tabs(["Holdings", "Performance", "Risk Metrics"])
+    tab1, tab2 = st.tabs(["Holdings", "Risk Metrics"])
 
     with tab1:
         holdings.render_table(st.session_state.holdings)
-
-    with tab2:
+        st.divider()
         visualizations.render_charts(st.session_state.holdings)
 
-    with tab3:
+    with tab2:
         risk_metrics.render_metrics(st.session_state.holdings)
 
 

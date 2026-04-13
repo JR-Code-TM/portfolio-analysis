@@ -212,8 +212,8 @@ def expand_holdings_for_analysis(
 
             virtual_shares = (etf_mv * weight) / sub_price
 
-            # Get sector and country from cache
-            sub_info = st.session_state.get("ticker_info_cache", {}).get(sub_t, {})
+            # Get sector and country — fetch from yfinance if not yet cached
+            sub_info = get_ticker_info_cached(sub_t)
             sub_sector = sub_info.get("sector") or "Other"
             sub_country = sub_info.get("country")
             sub_name = sub_info.get("company_name") or sub_t
