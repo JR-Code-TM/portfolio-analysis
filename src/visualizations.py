@@ -113,9 +113,8 @@ def render_charts(holdings: list[dict]):
     with st.spinner("Loading market data…"):
         price_data, synthetic_tickers = fetch_price_history(all_tickers)
         benchmark = fetch_benchmark()
-
-    # Expand ETF holdings for composition charts
-    expanded = expand_holdings_for_analysis(holdings, price_data)
+        # Expand inside spinner so constituent info fetches (yfinance) are covered
+        expanded = expand_holdings_for_analysis(holdings, price_data)
 
     # Row 1: performance chart (full width)
     _render_performance_chart(holdings, price_data, benchmark, synthetic_tickers)
