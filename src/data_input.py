@@ -20,7 +20,7 @@ def render_sidebar():
 def _render_manual_entry():
     with st.expander("Add Holding Manually", expanded=True):
         # --- Ticker + Lookup ---
-        t_col, btn_col = st.columns([3, 1])
+        t_col, btn_col = st.columns([3, 1.2])
         with t_col:
             ticker_input = st.text_input(
                 "Ticker Symbol",
@@ -29,7 +29,7 @@ def _render_manual_entry():
             ).upper().strip()
         with btn_col:
             st.write("")  # vertical alignment spacer
-            lookup_clicked = st.button("Lookup", use_container_width=True)
+            lookup_clicked = st.button("Search", use_container_width=True)
 
         # Detect ticker change — clear stale lookup state
         if ticker_input != st.session_state.get("_last_lookup_ticker", ""):

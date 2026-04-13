@@ -33,6 +33,9 @@ DARK_CSS = """
         background-color: #161b22 !important;
         border-color: #30363d !important;
     }
+    [data-testid="stSidebar"] .stButton button {
+        white-space: nowrap !important;
+    }
 </style>
 """
 
@@ -42,6 +45,9 @@ LIGHT_CSS = """
         background-color: #f8f9fa !important;
         border-radius: 8px;
         padding: 12px;
+    }
+    [data-testid="stSidebar"] .stButton button {
+        white-space: nowrap !important;
     }
 </style>
 """

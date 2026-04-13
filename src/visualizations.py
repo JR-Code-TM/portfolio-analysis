@@ -13,6 +13,88 @@ from src.market_data import (
     expand_holdings_for_analysis,
 )
 
+# ---------------------------------------------------------------------------
+# Region mapping
+# ---------------------------------------------------------------------------
+
+COUNTRY_TO_REGION: dict[str, str] = {
+    # North America
+    "United States": "North America", "US": "North America", "USA": "North America",
+    "Canada": "North America", "Mexico": "North America",
+    # Latin America
+    "Brazil": "Latin America", "Argentina": "Latin America", "Chile": "Latin America",
+    "Colombia": "Latin America", "Peru": "Latin America", "Venezuela": "Latin America",
+    "Ecuador": "Latin America", "Bolivia": "Latin America", "Paraguay": "Latin America",
+    "Uruguay": "Latin America", "Panama": "Latin America", "Costa Rica": "Latin America",
+    "Guatemala": "Latin America", "Dominican Republic": "Latin America",
+    # Europe
+    "United Kingdom": "Europe", "Germany": "Europe", "France": "Europe",
+    "Italy": "Europe", "Spain": "Europe", "Netherlands": "Europe",
+    "Switzerland": "Europe", "Sweden": "Europe", "Norway": "Europe",
+    "Denmark": "Europe", "Finland": "Europe", "Belgium": "Europe",
+    "Austria": "Europe", "Portugal": "Europe", "Ireland": "Europe",
+    "Poland": "Europe", "Russia": "Europe", "Czech Republic": "Europe",
+    "Hungary": "Europe", "Greece": "Europe", "Luxembourg": "Europe",
+    "Romania": "Europe", "Slovakia": "Europe", "Croatia": "Europe",
+    # Middle East
+    "Saudi Arabia": "Middle East", "United Arab Emirates": "Middle East",
+    "UAE": "Middle East", "Israel": "Middle East", "Qatar": "Middle East",
+    "Kuwait": "Middle East", "Bahrain": "Middle East", "Turkey": "Middle East",
+    "Jordan": "Middle East", "Oman": "Middle East", "Lebanon": "Middle East",
+    # Africa
+    "South Africa": "Africa", "Nigeria": "Africa", "Kenya": "Africa",
+    "Egypt": "Africa", "Morocco": "Africa", "Ghana": "Africa",
+    "Ethiopia": "Africa", "Tanzania": "Africa", "Zimbabwe": "Africa",
+    # APAC
+    "Japan": "APAC", "China": "APAC", "Hong Kong": "APAC", "Australia": "APAC",
+    "South Korea": "APAC", "India": "APAC", "Singapore": "APAC", "Taiwan": "APAC",
+    "New Zealand": "APAC", "Indonesia": "APAC", "Malaysia": "APAC",
+    "Thailand": "APAC", "Philippines": "APAC", "Vietnam": "APAC",
+    "Bangladesh": "APAC", "Pakistan": "APAC", "Sri Lanka": "APAC",
+    "Myanmar": "APAC", "Cambodia": "APAC",
+}
+
+# Keyword-based fallback for ETFs where country is not available
+ETF_NAME_KEYWORDS: dict[str, list[str]] = {
+    "APAC": [
+        "japan", "china", "asia", "pacific", "apac", "korea", "india", "australia",
+        "singapore", "taiwan", "hong kong", "emerging asia", "msci asia",
+    ],
+    "Europe": [
+        "europe", "european", "ftse europe", "stoxx", "euro", "eurozone",
+        "msci europe", "pan european",
+    ],
+    "Middle East": [
+        "middle east", "gulf", "mena", "saudi", "emerging markets middle", "gcc",
+    ],
+    "Africa": ["africa", "african"],
+    "Latin America": [
+        "latin america", "latin", "latam", "brazil", "emerging americas",
+        "msci latin",
+    ],
+    "North America": [
+        "north america", "s&p 500", "nasdaq", "dow jones", "russell", "us equity",
+        "american", "united states",
+    ],
+}
+
+
+def _get_region(holding: dict) -> str:
+    """Map a holding to one of the 6 finance regions."""
+    country = holding.get("country")
+    if country:
+        return COUNTRY_TO_REGION.get(country, "Other")
+    # Fallback for ETFs without a country: keyword-match the company name
+    name = (holding.get("company_name") or holding.get("ticker", "")).lower()
+    for region, keywords in ETF_NAME_KEYWORDS.items():
+        if any(kw in name for kw in keywords):
+            return region
+    return "Other"
+
+
+# ---------------------------------------------------------------------------
+# Public render entry point
+# ---------------------------------------------------------------------------
 
 def render_charts(holdings: list[dict]):
     if not holdings:
@@ -38,13 +120,17 @@ def render_charts(holdings: list[dict]):
     # Row 1: performance chart (full width)
     _render_performance_chart(holdings, price_data, benchmark, synthetic_tickers)
 
-    # Row 2: sector + country pies side by side
+    # Row 2: sector + region pies side by side
     col1, col2 = st.columns(2)
     with col1:
         _render_sector_pie(expanded)
     with col2:
-        _render_country_pie(expanded)
+        _render_region_pie(expanded)
 
+
+# ---------------------------------------------------------------------------
+# Chart helpers
+# ---------------------------------------------------------------------------
 
 def _render_performance_chart(
     holdings: list[dict],
@@ -133,23 +219,23 @@ def _render_sector_pie(expanded_holdings: list[dict]):
     _render_donut(list(sector_values.keys()), list(sector_values.values()))
 
 
-def _render_country_pie(expanded_holdings: list[dict]):
-    st.subheader("Country Exposure")
+def _render_region_pie(expanded_holdings: list[dict]):
+    st.subheader("Regional Exposure")
 
-    country_values: dict[str, float] = {}
+    region_values: dict[str, float] = {}
     for h in expanded_holdings:
         price = h.get("price")
         if price is None:
             continue
         mv = h["shares"] * price
-        country = h.get("country") or "Unknown"
-        country_values[country] = country_values.get(country, 0.0) + mv
+        region = _get_region(h)
+        region_values[region] = region_values.get(region, 0.0) + mv
 
-    if not country_values:
-        st.info("Country data unavailable. Use the Lookup button when adding holdings.")
+    if not region_values:
+        st.info("Regional data unavailable. Use Search when adding holdings to populate country data.")
         return
 
-    _render_donut(list(country_values.keys()), list(country_values.values()))
+    _render_donut(list(region_values.keys()), list(region_values.values()))
 
 
 def _render_donut(names: list[str], values: list[float]):

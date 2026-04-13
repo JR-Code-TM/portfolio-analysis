@@ -40,6 +40,12 @@ def render_table(holdings: list[dict]):
     total_gl = total_mv - total_cost
     total_pct = (total_gl / total_cost * 100) if total_cost > 0 else float("nan")
 
+    # Weight (%) — each holding's share of the total portfolio market value
+    if total_mv > 0:
+        df["Weight (%)"] = (df["Market Value"] / total_mv * 100)
+    else:
+        df["Weight (%)"] = float("nan")
+
     totals = pd.DataFrame([{
         "Ticker": "TOTAL",
         "Company": "",
@@ -48,6 +54,7 @@ def render_table(holdings: list[dict]):
         "Price": float("nan"),
         "Cost Basis": float("nan"),
         "Market Value": total_mv,
+        "Weight (%)": 100.0 if total_mv > 0 else float("nan"),
         "Total Cost": total_cost if total_cost > 0 else float("nan"),
         "Gain/Loss ($)": total_gl if total_cost > 0 else float("nan"),
         "Gain/Loss (%)": total_pct,
@@ -62,6 +69,7 @@ def render_table(holdings: list[dict]):
         "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
         "Cost Basis": st.column_config.NumberColumn("Cost Basis", format="$%.2f"),
         "Market Value": st.column_config.NumberColumn("Market Value", format="$%.2f"),
+        "Weight (%)": st.column_config.NumberColumn("Weight (%)", format="%.2f%%"),
         "Total Cost": st.column_config.NumberColumn("Total Cost", format="$%.2f"),
         "Gain/Loss ($)": st.column_config.NumberColumn("Gain/Loss ($)", format="$%.2f"),
         "Gain/Loss (%)": st.column_config.NumberColumn("Gain/Loss (%)", format="%.2f%%"),
