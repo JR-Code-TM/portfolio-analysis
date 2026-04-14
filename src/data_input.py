@@ -139,8 +139,38 @@ def _render_manual_entry():
 # CSV upload
 # ---------------------------------------------------------------------------
 
+_CSV_TEMPLATE = (
+    "Ticker,Company Name,Sector,Shares,Cost Basis (USD),Country,Is ETF\n"
+    "VOO,Vanguard S&P 500 ETF,Other,10,420.50,United States,TRUE\n"
+    "AAPL,Apple Inc.,Technology,25,150.00,United States,FALSE\n"
+    "EWY,iShares MSCI South Korea ETF,Other,15,65.00,South Korea,TRUE\n"
+)
+
+
+def _parse_bool_etf(value) -> bool:
+    """Coerce a cell value to a boolean ETF flag.
+
+    Accepts TRUE/FALSE, 1/0, YES/NO (case-insensitive). Returns False on any
+    parse failure or null value.
+    """
+    try:
+        if pd.isna(value):
+            return False
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip().lower() in ("true", "1", "yes", "y")
+
+
 def _render_csv_upload():
     with st.expander("Import from CSV"):
+        st.caption("Download the sample template to see the expected format:")
+        st.download_button(
+            label="📥 Download sample template",
+            data=_CSV_TEMPLATE,
+            file_name="portfolio_template.csv",
+            mime="text/csv",
+        )
+        st.divider()
         uploaded_file = st.file_uploader("Upload CSV", type=["csv"], label_visibility="collapsed")
 
         if uploaded_file is not None:
@@ -162,6 +192,7 @@ def _render_csv_upload():
             col_sector = st.selectbox("Sector (optional)", options=columns, key="csv_sector")
             col_cost = st.selectbox("Cost Basis (optional)", options=columns, key="csv_cost")
             col_country = st.selectbox("Country (optional)", options=columns, key="csv_country")
+            col_etf = st.selectbox("Is ETF (optional)", options=columns, key="csv_etf")
 
             if st.button("Import Holdings", type="primary", use_container_width=True):
                 required = {"Ticker": col_ticker, "Shares": col_shares}
@@ -202,6 +233,11 @@ def _render_csv_upload():
                             if col_country != "-- Select --" and pd.notna(row.get(col_country))
                             else None
                         )
+                        etf_val = (
+                            _parse_bool_etf(row[col_etf])
+                            if col_etf != "-- Select --" and col_etf in row.index
+                            else False
+                        )
 
                         st.session_state.holdings.append({
                             "ticker": ticker_val,
@@ -211,7 +247,7 @@ def _render_csv_upload():
                             "price": None,   # will be fetched when charts/metrics render
                             "cost_basis": cost_val_raw if cost_val_raw > 0 else None,
                             "country": country_val,
-                            "is_etf": False,
+                            "is_etf": etf_val,
                         })
                         imported += 1
                     except (ValueError, KeyError):
