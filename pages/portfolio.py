@@ -2,6 +2,9 @@ import streamlit as st
 
 from src import data_input, holdings, visualizations, risk_metrics
 
+# Signal to Research page that the user has left it
+st.session_state["_on_research_page"] = False
+
 # ---------------------------------------------------------------------------
 # Sidebar — theme toggle + data entry
 # ---------------------------------------------------------------------------

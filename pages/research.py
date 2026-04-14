@@ -3,6 +3,16 @@ import streamlit as st
 from src import stock_analysis
 
 # ---------------------------------------------------------------------------
+# Clear state when navigating TO this page from another page.
+# _on_research_page is set to False by other pages; when we see it as False
+# (or absent) on entry, we know the user just arrived and should reset.
+# ---------------------------------------------------------------------------
+if not st.session_state.get("_on_research_page", False):
+    st.session_state.pop("sa_last_ticker", None)
+    st.session_state["sa_ticker_input"] = ""
+    st.session_state["_on_research_page"] = True
+
+# ---------------------------------------------------------------------------
 # Sidebar — theme toggle only (no portfolio data entry here)
 # ---------------------------------------------------------------------------
 with st.sidebar:
