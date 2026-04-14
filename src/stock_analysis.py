@@ -11,7 +11,7 @@ import streamlit as st
 import yfinance as yf
 
 from src.theme import get_plotly_template, get_plotly_bg_color
-from src.market_data import fetch_etf_holdings, get_ticker_info_cached
+from src.market_data import fetch_etf_holdings, fetch_ticker_info as _fetch_ticker_info_pure
 
 
 # ---------------------------------------------------------------------------
@@ -232,14 +232,18 @@ def _render_etf_metrics(info: dict):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _fetch_holdings_with_names(ticker: str) -> list[dict]:
-    """Fetch top holdings and enrich each with the company's display name."""
+    """Fetch top holdings and enrich each with the company's display name.
+
+    Uses fetch_ticker_info directly (pure yfinance call) — safe inside
+    @st.cache_data because it does NOT access st.session_state.
+    """
     raw = fetch_etf_holdings(ticker)
     if not raw:
         return []
     top10 = sorted(raw, key=lambda x: x["weight"], reverse=True)[:10]
     enriched = []
     for h in top10:
-        info = get_ticker_info_cached(h["ticker"])
+        info = _fetch_ticker_info_pure(h["ticker"])
         name = info.get("company_name") or h["ticker"]
         enriched.append({**h, "name": name})
     return enriched
@@ -435,7 +439,7 @@ def _render_price_chart(ticker: str, hist: pd.DataFrame):
     st.subheader("Price Time Series")
 
     if hist.empty:
-        st.warning("Price history data is unavailable for this ticker.")
+        st.error("Price history could not be loaded for this ticker. Please try again in a moment.")
         return
 
     # Flatten potential MultiIndex columns (yfinance sometimes returns them)

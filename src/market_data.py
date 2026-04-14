@@ -81,7 +81,8 @@ def fetch_ticker_info(ticker: str) -> dict:
     """Fetch company info from yfinance. Caching is done by the caller via
     st.session_state.ticker_info_cache to persist across reruns."""
     try:
-        info = yf.Ticker(ticker).info
+        t = yf.Ticker(ticker)
+        info = t.info
         quote_type = info.get("quoteType", "")
         is_etf = quote_type.upper() == "ETF"
         price = (
@@ -89,6 +90,14 @@ def fetch_ticker_info(ticker: str) -> dict:
             or info.get("regularMarketPrice")
             or info.get("navPrice")
         )
+        # Fallback: fast_info.last_price is lighter and often available when
+        # .info price fields are None (e.g. pre/post-market or rate-limit)
+        if price is None:
+            try:
+                fi = t.fast_info
+                price = getattr(fi, "last_price", None) or getattr(fi, "lastPrice", None)
+            except Exception:
+                pass
         return {
             "company_name": info.get("longName") or info.get("shortName"),
             "sector": info.get("sector"),
