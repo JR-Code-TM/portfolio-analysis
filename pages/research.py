@@ -25,5 +25,5 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Main content
 # ---------------------------------------------------------------------------
-st.title("🔍 Stock Research")
+st.title("🔍 Equity Research")
 stock_analysis.render_stock_analysis()

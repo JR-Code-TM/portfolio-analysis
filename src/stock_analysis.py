@@ -1,4 +1,4 @@
-"""Stock Analysis tab — per-ticker deep-dive with financial metrics,
+"""Equity Analysis tab — per-ticker deep-dive with financial metrics,
 analyst recommendations, and price chart.
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import streamlit as st
 import yfinance as yf
 
 from src.theme import get_plotly_template, get_plotly_bg_color
-from src.market_data import fetch_etf_holdings
+from src.market_data import fetch_etf_holdings, get_ticker_info_cached
 
 
 # ---------------------------------------------------------------------------
@@ -98,8 +98,8 @@ def _recommendation_label(key: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 
 def render_stock_analysis():
-    """Render the Stock Analysis tab."""
-    st.subheader("📈 Stock Analysis")
+    """Render the Equity Analysis section."""
+    st.subheader("📈 Equity Analysis")
 
     col_input, col_btn = st.columns([4, 1])
     with col_input:
@@ -222,29 +222,45 @@ def _render_etf_metrics(info: dict):
         _fmt(price, "dollar"),
         delta=f"{day_change_pct:+.2f}%" if day_change_pct is not None else None,
     )
+    expense = info.get("expenseRatio") or info.get("annualReportExpenseRatio")
     c2.metric("AUM",           _fmt(info.get("totalAssets"), "large"))
-    c3.metric("Expense Ratio", _fmt(info.get("expenseRatio"), "pct"))
+    c3.metric("Expense Ratio", _fmt(expense, "pct"))
     c4.metric("Yield",         _fmt(info.get("yield"), "pct"))
     c5.metric("52W Low",       _fmt(info.get("fiftyTwoWeekLow"), "dollar"))
     c6.metric("52W High",      _fmt(info.get("fiftyTwoWeekHigh"), "dollar"))
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_holdings_with_names(ticker: str) -> list[dict]:
+    """Fetch top holdings and enrich each with the company's display name."""
+    raw = fetch_etf_holdings(ticker)
+    if not raw:
+        return []
+    top10 = sorted(raw, key=lambda x: x["weight"], reverse=True)[:10]
+    enriched = []
+    for h in top10:
+        info = get_ticker_info_cached(h["ticker"])
+        name = info.get("company_name") or h["ticker"]
+        enriched.append({**h, "name": name})
+    return enriched
+
+
 def _render_etf_holdings(ticker: str):
     st.subheader("Top Holdings")
     with st.spinner("Loading ETF holdings…"):
-        holdings = fetch_etf_holdings(ticker)
+        holdings = _fetch_holdings_with_names(ticker)
     if not holdings:
         st.info("Holdings data is unavailable for this ETF.")
         return
 
-    top10 = sorted(holdings, key=lambda x: x["weight"], reverse=True)[:10]
     df = pd.DataFrame([
         {
             "Rank": i + 1,
             "Ticker": h["ticker"],
+            "Company": h["name"],
             "Weight (%)": f'{h["weight"] * 100:.2f}%',
         }
-        for i, h in enumerate(top10)
+        for i, h in enumerate(holdings)
     ])
     st.dataframe(df, use_container_width=True, hide_index=True)
 

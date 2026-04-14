@@ -29,7 +29,7 @@ apply_theme()  # re-injected on every rerun — applies to all pages
 pg = st.navigation(
     [
         st.Page("pages/portfolio.py", title="My Portfolio", icon="💼", default=True),
-        st.Page("pages/research.py",  title="Stock Research", icon="🔍"),
+        st.Page("pages/research.py",  title="Equity Research", icon="🔍"),
     ],
     position="sidebar",
 )
