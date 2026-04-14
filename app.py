@@ -1,7 +1,7 @@
 import streamlit as st
 
 from src.theme import apply_theme
-from src import data_input, holdings, visualizations, risk_metrics
+from src import data_input, holdings, visualizations, risk_metrics, stock_analysis
 
 
 def init_session_state():
@@ -65,14 +65,14 @@ def main():
         with c2:
             st.markdown("""
 **CSV Import**
-1. Prepare a CSV with columns for ticker, shares, price, cost basis
-2. Open the *Import from CSV* section in the sidebar
-3. Upload your file and map the columns
-4. Click **Import Holdings**
+1. Open *Import from CSV* in the sidebar
+2. Click **📥 Download sample template** — fill in Ticker, Shares, and optionally Cost Basis per Share
+3. Upload your file and click **Import & Auto-load Holdings**
+4. Company name, sector, country, price, and ETF status are fetched automatically
 """)
         return
 
-    tab1, tab2 = st.tabs(["Holdings", "Risk Metrics"])
+    tab1, tab2, tab3 = st.tabs(["Holdings", "Risk Metrics", "📈 Stock Analysis"])
 
     with tab1:
         holdings.render_table(st.session_state.holdings)
@@ -81,6 +81,9 @@ def main():
 
     with tab2:
         risk_metrics.render_metrics(st.session_state.holdings)
+
+    with tab3:
+        stock_analysis.render_stock_analysis()
 
 
 if __name__ == "__main__":
