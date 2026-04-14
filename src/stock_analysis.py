@@ -1,4 +1,4 @@
-"""Stock Analysis tab — per-ticker deep-dive with financial metrics,
+"""Equity Analysis tab — per-ticker deep-dive with financial metrics,
 analyst recommendations, and price chart.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ import streamlit as st
 import yfinance as yf
 
 from src.theme import get_plotly_template, get_plotly_bg_color
+from src.market_data import fetch_etf_holdings, get_ticker_info_cached
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +98,8 @@ def _recommendation_label(key: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 
 def render_stock_analysis():
-    """Render the Stock Analysis tab."""
-    st.subheader("📈 Stock Analysis")
+    """Render the Equity Analysis section."""
+    st.subheader("📈 Equity Analysis")
 
     col_input, col_btn = st.columns([4, 1])
     with col_input:
@@ -147,19 +148,161 @@ def _render_analysis(ticker: str):
         )
         return
 
-    _render_header(ticker, info)
-    st.divider()
-    _render_price_chart(ticker, hist)
-    st.divider()
-    _render_key_metrics(info)
-    st.divider()
-    _render_recommendation(info)
-    st.divider()
-    _render_financial_metrics(info)
+    quote_type = info.get("quoteType", "").upper()
+    if quote_type == "ETF":
+        _render_etf_analysis(ticker, info, hist)
+    else:
+        _render_header(ticker, info)
+        st.divider()
+        _render_price_chart(ticker, hist)
+        st.divider()
+        _render_key_metrics(info)
+        st.divider()
+        _render_recommendation(info)
+        st.divider()
+        _render_financial_metrics(info)
 
 
 # ---------------------------------------------------------------------------
-# Section renderers
+# ETF analysis orchestrator + section renderers
+# ---------------------------------------------------------------------------
+
+def _render_etf_analysis(ticker: str, info: dict, hist: pd.DataFrame):
+    _render_etf_header(ticker, info)
+    st.divider()
+    _render_price_chart(ticker, hist)
+    st.divider()
+    _render_etf_metrics(info)
+    st.divider()
+    _render_etf_holdings(ticker)
+    st.divider()
+    _render_etf_profile(info)
+
+
+def _render_etf_header(ticker: str, info: dict):
+    fund_name = info.get("longName") or info.get("shortName") or ticker
+    badge_color = "#6366f1"
+    st.markdown(
+        f"## {fund_name} &nbsp; `{ticker}` &nbsp;"
+        f"<span style='font-size:0.75rem; font-weight:600; color:#ffffff;"
+        f"background:{badge_color}; border-radius:6px; padding:3px 8px;'>ETF</span>",
+        unsafe_allow_html=True,
+    )
+
+    meta_parts = []
+    exchange = info.get("fullExchangeName") or info.get("exchange")
+    if exchange:
+        meta_parts.append(f"Exchange: **{exchange}**")
+    category = info.get("category")
+    if category:
+        meta_parts.append(f"Category: **{category}**")
+    fund_family = info.get("fundFamily")
+    if fund_family:
+        meta_parts.append(f"Fund Family: **{fund_family}**")
+    if meta_parts:
+        st.caption(" | ".join(meta_parts))
+
+    summary = info.get("longBusinessSummary") or ""
+    if summary:
+        display = summary if len(summary) <= 500 else summary[:497] + "…"
+        st.markdown(display)
+
+
+def _render_etf_metrics(info: dict):
+    st.subheader("Key Metrics")
+    price = info.get("navPrice") or info.get("currentPrice") or info.get("regularMarketPrice")
+    prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+    day_change_pct: Optional[float] = None
+    if price and prev_close and prev_close != 0:
+        day_change_pct = (price - prev_close) / prev_close * 100
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric(
+        "NAV / Price",
+        _fmt(price, "dollar"),
+        delta=f"{day_change_pct:+.2f}%" if day_change_pct is not None else None,
+    )
+    expense = info.get("expenseRatio") or info.get("annualReportExpenseRatio")
+    c2.metric("AUM",           _fmt(info.get("totalAssets"), "large"))
+    c3.metric("Expense Ratio", _fmt(expense, "pct"))
+    c4.metric("Yield",         _fmt(info.get("yield"), "pct"))
+    c5.metric("52W Low",       _fmt(info.get("fiftyTwoWeekLow"), "dollar"))
+    c6.metric("52W High",      _fmt(info.get("fiftyTwoWeekHigh"), "dollar"))
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_holdings_with_names(ticker: str) -> list[dict]:
+    """Fetch top holdings and enrich each with the company's display name."""
+    raw = fetch_etf_holdings(ticker)
+    if not raw:
+        return []
+    top10 = sorted(raw, key=lambda x: x["weight"], reverse=True)[:10]
+    enriched = []
+    for h in top10:
+        info = get_ticker_info_cached(h["ticker"])
+        name = info.get("company_name") or h["ticker"]
+        enriched.append({**h, "name": name})
+    return enriched
+
+
+def _render_etf_holdings(ticker: str):
+    st.subheader("Top Holdings")
+    with st.spinner("Loading ETF holdings…"):
+        holdings = _fetch_holdings_with_names(ticker)
+    if not holdings:
+        st.info("Holdings data is unavailable for this ETF.")
+        return
+
+    df = pd.DataFrame([
+        {
+            "Rank": i + 1,
+            "Ticker": h["ticker"],
+            "Company": h["name"],
+            "Weight (%)": f'{h["weight"] * 100:.2f}%',
+        }
+        for i, h in enumerate(holdings)
+    ])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _render_etf_profile(info: dict):
+    st.subheader("Fund Profile")
+
+    left, right = st.columns(2)
+
+    def _row(col, label: str, value: str):
+        lc, vc = col.columns([2, 1])
+        lc.markdown(f"**{label}**")
+        vc.markdown(value)
+
+    inception_raw = info.get("fundInceptionDate")
+    if inception_raw:
+        try:
+            inception_str = pd.Timestamp(inception_raw, unit="s").strftime("%b %d, %Y")
+        except Exception:
+            inception_str = "N/A"
+    else:
+        inception_str = "N/A"
+
+    with left:
+        st.markdown("**Fund Details**")
+        _row(left, "Category",       info.get("category") or "N/A")
+        _row(left, "Fund Family",    info.get("fundFamily") or "N/A")
+        _row(left, "Legal Type",     info.get("legalType") or "N/A")
+        _row(left, "Inception Date", inception_str)
+        _row(left, "Currency",       info.get("currency") or "N/A")
+
+    with right:
+        st.markdown("**Risk & Income**")
+        _row(right, "Beta (3Y)",          _fmt(info.get("beta3Year")))
+        _row(right, "Trailing Div Yield", _fmt(info.get("trailingAnnualDividendYield"), "pct"))
+        _row(right, "5Y Avg Return",      _fmt(info.get("fiveYearAverageReturn"), "pct"))
+        _row(right, "3Y Avg Return",      _fmt(info.get("threeYearAverageReturn"), "pct"))
+        _row(right, "Avg Volume",         _fmt(info.get("averageVolume")))
+
+
+# ---------------------------------------------------------------------------
+# Stock section renderers
 # ---------------------------------------------------------------------------
 
 def _render_header(ticker: str, info: dict):
