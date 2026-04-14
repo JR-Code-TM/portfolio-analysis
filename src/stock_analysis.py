@@ -149,13 +149,13 @@ def _render_analysis(ticker: str):
 
     _render_header(ticker, info)
     st.divider()
+    _render_price_chart(ticker, hist)
+    st.divider()
     _render_key_metrics(info)
     st.divider()
     _render_recommendation(info)
     st.divider()
     _render_financial_metrics(info)
-    st.divider()
-    _render_price_chart(ticker, hist)
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ def _render_financial_metrics(info: dict):
 
 
 def _render_price_chart(ticker: str, hist: pd.DataFrame):
-    st.subheader("1-Year Price History")
+    st.subheader("Price Time Series")
 
     if hist.empty:
         st.warning("Price history data is unavailable for this ticker.")
