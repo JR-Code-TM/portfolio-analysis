@@ -57,7 +57,11 @@ LIGHT_CSS = """
 }
 [data-testid="stMetricValue"] {
     color: #1e293b !important;
+    font-size: 1.35rem !important;
     font-weight: 700 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 [data-testid="stMetricDelta"] svg { display: none; }
 [data-testid="stMetricDeltaPositive"] {
@@ -67,6 +71,20 @@ LIGHT_CSS = """
 [data-testid="stMetricDeltaNegative"] {
     color: #e11d48 !important;
     font-weight: 600;
+}
+
+/* ── Input fields ────────────────────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
 }
 
 /* ── Primary buttons ────────────────────────────────────────────────── */
@@ -177,7 +195,11 @@ DARK_CSS = """
 }
 [data-testid="stMetricValue"] {
     color: #f1f5f9 !important;
+    font-size: 1.35rem !important;
     font-weight: 700 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 [data-testid="stMetricDelta"] svg { display: none; }
 [data-testid="stMetricDeltaPositive"] {
@@ -187,6 +209,20 @@ DARK_CSS = """
 [data-testid="stMetricDeltaNegative"] {
     color: #fb7185 !important;
     font-weight: 600;
+}
+
+/* ── Input fields ────────────────────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {
+    border: 1.5px solid #334155 !important;
+    border-radius: 8px !important;
+    background: #0f172a !important;
+    color: #f1f5f9 !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stNumberInput"] input:focus {
+    border-color: #818cf8 !important;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15) !important;
 }
 
 /* ── Primary buttons ────────────────────────────────────────────────── */
