@@ -66,9 +66,9 @@ def main():
             st.markdown("""
 **CSV Import**
 1. Open *Import from CSV* in the sidebar
-2. Click **📥 Download sample template** to get a pre-filled template (VOO, AAPL, EWY)
-3. Fill in your holdings, then upload the file and map the columns
-4. Click **Import Holdings**
+2. Click **📥 Download sample template** — fill in Ticker, Shares, and optionally Cost Basis per Share
+3. Upload your file and click **Import & Auto-load Holdings**
+4. Company name, sector, country, price, and ETF status are fetched automatically
 """)
         return
 

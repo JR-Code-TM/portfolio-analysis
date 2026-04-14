@@ -140,30 +140,19 @@ def _render_manual_entry():
 # ---------------------------------------------------------------------------
 
 _CSV_TEMPLATE = (
-    "Ticker,Company Name,Sector,Shares,Cost Basis (USD),Country,Is ETF\n"
-    "VOO,Vanguard S&P 500 ETF,Other,10,420.50,United States,TRUE\n"
-    "AAPL,Apple Inc.,Technology,25,150.00,United States,FALSE\n"
-    "EWY,iShares MSCI South Korea ETF,Other,15,65.00,South Korea,TRUE\n"
+    "Ticker,Shares,Cost Basis per Share (USD)\n"
+    "VOO,10,420.50\n"
+    "AAPL,25,150.00\n"
+    "EWY,15,65.00\n"
 )
-
-
-def _parse_bool_etf(value) -> bool:
-    """Coerce a cell value to a boolean ETF flag.
-
-    Accepts TRUE/FALSE, 1/0, YES/NO (case-insensitive). Returns False on any
-    parse failure or null value.
-    """
-    try:
-        if pd.isna(value):
-            return False
-    except (TypeError, ValueError):
-        pass
-    return str(value).strip().lower() in ("true", "1", "yes", "y")
 
 
 def _render_csv_upload():
     with st.expander("Import from CSV"):
-        st.caption("Download the sample template to see the expected format:")
+        st.caption(
+            "Only **Ticker** and **Shares** are required. "
+            "Company name, sector, country, price, and ETF status are auto-fetched from yfinance."
+        )
         st.download_button(
             label="📥 Download sample template",
             data=_CSV_TEMPLATE,
@@ -183,81 +172,89 @@ def _render_csv_upload():
             st.caption("Preview (first 5 rows):")
             st.dataframe(df.head(), use_container_width=True)
 
-            columns = ["-- Select --"] + list(df.columns)
+            # Auto-detect columns by normalising headers
+            norm = {c.strip().lower(): c for c in df.columns}
 
-            st.caption("Map CSV columns to required fields (* = required):")
-            col_ticker = st.selectbox("Ticker *", options=columns, key="csv_ticker")
-            col_shares = st.selectbox("Shares *", options=columns, key="csv_shares")
-            col_name = st.selectbox("Company Name (optional)", options=columns, key="csv_name")
-            col_sector = st.selectbox("Sector (optional)", options=columns, key="csv_sector")
-            col_cost = st.selectbox("Cost Basis (optional)", options=columns, key="csv_cost")
-            col_country = st.selectbox("Country (optional)", options=columns, key="csv_country")
-            col_etf = st.selectbox("Is ETF (optional)", options=columns, key="csv_etf")
+            def _find_col(*candidates):
+                for c in candidates:
+                    if c in norm:
+                        return norm[c]
+                return None
 
-            if st.button("Import Holdings", type="primary", use_container_width=True):
-                required = {"Ticker": col_ticker, "Shares": col_shares}
-                missing = [k for k, v in required.items() if v == "-- Select --"]
-                if missing:
-                    st.error(f"Please map required fields: {', '.join(missing)}")
-                    return
+            col_ticker = _find_col("ticker", "symbol", "tick")
+            col_shares = _find_col("shares", "quantity", "qty", "units")
+            col_cost   = _find_col(
+                "cost basis per share (usd)", "cost basis per share",
+                "cost basis", "cost_basis", "avg cost", "average cost",
+                "purchase price", "cost per share",
+            )
 
+            # Show detected mapping so the user can verify before importing
+            st.caption("Detected column mapping:")
+            mc1, mc2, mc3 = st.columns(3)
+            mc1.markdown(f"**Ticker** → `{col_ticker or '❌ not found'}`")
+            mc2.markdown(f"**Shares** → `{col_shares or '❌ not found'}`")
+            mc3.markdown(f"**Cost Basis** → `{col_cost or 'not mapped (optional)'}`")
+
+            if not col_ticker or not col_shares:
+                st.error(
+                    "Could not detect required columns. "
+                    "Rename your columns to **Ticker** and **Shares** and re-upload."
+                )
+                return
+
+            if st.button("Import & Auto-load Holdings", type="primary", use_container_width=True):
                 imported = errors = 0
+                rows_to_import = []
+
+                # --- Parse rows first (fast, no network) ---
                 for _, row in df.iterrows():
                     try:
                         ticker_val = str(row[col_ticker]).upper().strip()
                         if not ticker_val or ticker_val == "NAN":
                             continue
-
                         shares_val = float(row[col_shares])
                         if shares_val <= 0:
                             errors += 1
                             continue
-
-                        name_val = (
-                            str(row[col_name]).strip()
-                            if col_name != "-- Select --" and pd.notna(row.get(col_name))
-                            else ticker_val
-                        )
-                        sector_val = (
-                            str(row[col_sector]).strip()
-                            if col_sector != "-- Select --" and pd.notna(row.get(col_sector))
-                            else "Other"
-                        )
-                        cost_val_raw = (
+                        cost_val = (
                             float(row[col_cost])
-                            if col_cost != "-- Select --" and pd.notna(row.get(col_cost))
+                            if col_cost and pd.notna(row.get(col_cost))
                             else 0.0
                         )
-                        country_val = (
-                            str(row[col_country]).strip()
-                            if col_country != "-- Select --" and pd.notna(row.get(col_country))
-                            else None
-                        )
-                        etf_val = (
-                            _parse_bool_etf(row[col_etf])
-                            if col_etf != "-- Select --" and col_etf in row.index
-                            else False
-                        )
-
-                        st.session_state.holdings.append({
-                            "ticker": ticker_val,
-                            "company_name": name_val,
-                            "sector": sector_val if sector_val in SECTORS else "Other",
-                            "shares": shares_val,
-                            "price": None,   # will be fetched when charts/metrics render
-                            "cost_basis": cost_val_raw if cost_val_raw > 0 else None,
-                            "country": country_val,
-                            "is_etf": etf_val,
-                        })
-                        imported += 1
+                        rows_to_import.append((ticker_val, shares_val, cost_val))
                     except (ValueError, KeyError):
                         errors += 1
 
+                # --- Fetch info from yfinance for each ticker (with progress) ---
+                if rows_to_import:
+                    progress = st.progress(0, text="Fetching ticker info…")
+                    for i, (ticker_val, shares_val, cost_val) in enumerate(rows_to_import):
+                        progress.progress(
+                            (i + 1) / len(rows_to_import),
+                            text=f"Loading {ticker_val} ({i + 1}/{len(rows_to_import)})…",
+                        )
+                        info = fetch_ticker_info(ticker_val)
+                        st.session_state.ticker_info_cache[ticker_val] = info
+
+                        st.session_state.holdings.append({
+                            "ticker": ticker_val,
+                            "company_name": info.get("company_name") or ticker_val,
+                            "sector": info.get("sector") or "Other",
+                            "shares": shares_val,
+                            "price": info.get("price"),
+                            "cost_basis": cost_val if cost_val > 0 else None,
+                            "country": info.get("country"),
+                            "is_etf": bool(info.get("is_etf", False)),
+                        })
+                        imported += 1
+                    progress.empty()
+
                 st.session_state.price_cache = {}
                 if imported > 0:
-                    st.success(f"Imported {imported} holdings. Prices will be fetched automatically.")
+                    st.success(f"Imported {imported} holdings with auto-populated data.")
                 if errors > 0:
-                    st.warning(f"Skipped {errors} rows due to errors.")
+                    st.warning(f"Skipped {errors} rows due to invalid ticker or shares value.")
                 if imported > 0:
                     st.rerun()
 
