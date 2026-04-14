@@ -116,10 +116,9 @@ def render_stock_analysis():
     # Persist the last analyzed ticker across tab switches
     if analyze and ticker:
         st.session_state["sa_last_ticker"] = ticker
-        # Clear cache key so a fresh analysis is triggered on explicit re-analyze
+        # Clear cache so a fresh analysis is triggered on explicit re-analyze
         _fetch_info.clear()
         _fetch_history.clear()
-        _fetch_news.clear()
 
     active_ticker = st.session_state.get("sa_last_ticker")
 
