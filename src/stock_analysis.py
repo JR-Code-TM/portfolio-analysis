@@ -79,11 +79,11 @@ def _fmt(value: Any, fmt: str = "") -> str:
 
 def _recommendation_color(key: Optional[str]) -> str:
     mapping = {
-        "strong_buy": "#26a69a",
-        "buy": "#26a69a",
-        "hold": "#ff6d00",
-        "underperform": "#ef5350",
-        "sell": "#ef5350",
+        "strong_buy": "#0d9488",
+        "buy": "#0d9488",
+        "hold": "#f59e0b",
+        "underperform": "#e11d48",
+        "sell": "#e11d48",
     }
     return mapping.get((key or "").lower(), "#888888")
 
@@ -312,19 +312,19 @@ def _render_price_chart(ticker: str, hist: pd.DataFrame):
         x=close.index,
         y=close.values,
         name=f"{ticker} Close",
-        line=dict(color="#2962ff", width=2),
+        line=dict(color="#6366f1", width=2),
     ))
     fig.add_trace(go.Scatter(
         x=ma50.index,
         y=ma50.values,
         name="50-Day MA",
-        line=dict(color="#ff6d00", width=1.5, dash="dot"),
+        line=dict(color="#f59e0b", width=1.5, dash="dot"),
     ))
     fig.add_trace(go.Scatter(
         x=ma200.index,
         y=ma200.values,
         name="200-Day MA",
-        line=dict(color="#26a69a", width=1.5, dash="dash"),
+        line=dict(color="#0d9488", width=1.5, dash="dash"),
     ))
 
     fig.update_layout(
