@@ -176,13 +176,13 @@ def _render_performance_chart(
         x=portfolio_norm.index,
         y=portfolio_norm.values,
         name="Portfolio",
-        line=dict(color="#2962ff", width=2.5),
+        line=dict(color="#6366f1", width=2.5),
     ))
     fig.add_trace(go.Scatter(
         x=bench_norm.index,
         y=bench_norm.values,
         name="S&P 500",
-        line=dict(color="#ff6d00", width=2, dash="dash"),
+        line=dict(color="#f59e0b", width=2, dash="dash"),
     ))
 
     fig.update_layout(
