@@ -264,7 +264,7 @@ def _render_recommendation(info: dict):
         unsafe_allow_html=True,
     )
 
-    r1, r2, r3, r4 = st.columns(4)
+    r1, r2, r3, r4, r5 = st.columns(5)
     r1.metric(
         "Consensus Score",
         f"{rec_mean:.1f} / 5.0" if rec_mean is not None else "N/A",
@@ -272,11 +272,8 @@ def _render_recommendation(info: dict):
     )
     r2.metric("# Analysts", str(num_analysts) if num_analysts else "N/A")
     r3.metric("Mean Target", _fmt(target_price, "dollar"))
-    r4.metric(
-        "Target Range",
-        f"{_fmt(target_low, 'dollar')} – {_fmt(target_high, 'dollar')}"
-        if target_low and target_high else "N/A",
-    )
+    r4.metric("Target Low", _fmt(target_low, "dollar"))
+    r5.metric("Target High", _fmt(target_high, "dollar"))
 
     if target_price and current_price and current_price > 0:
         upside_pct = (target_price - current_price) / current_price * 100
@@ -457,27 +454,15 @@ def _render_news(news: list[dict]):
         st.info("No recent news available for this ticker.")
         return
 
-    # Parse all items and separate trusted from others
-    parsed = [p for item in news if (p := _parse_news_item(item))]
-    trusted = [p for p in parsed if _is_trusted(p["provider"])]
-    others  = [p for p in parsed if not _is_trusted(p["provider"])]
+    # Only show items from trusted outlets — no fallback to other sources
+    parsed  = [p for item in news if (p := _parse_news_item(item))]
+    trusted = [p for p in parsed if _is_trusted(p["provider"])][:5]
 
-    # Show up to 5 trusted items; if fewer than 5, pad with next-best sources
-    display = trusted[:5]
-    if len(display) < 5:
-        display += others[: 5 - len(display)]
-
-    if not display:
-        st.info("No recent news available for this ticker.")
+    if not trusted:
+        st.info("No recent news from major financial outlets (Bloomberg, Reuters, WSJ, etc.) available for this ticker.")
         return
 
-    if len(trusted) < len(display):
-        st.caption(
-            f"Showing {len(trusted)} article(s) from major outlets; "
-            f"{len(display) - len(trusted)} from other sources."
-        )
-
-    for item in display:
+    for item in trusted:
         time_str = _time_ago(item["pub_date"])
         caption_parts = [p for p in [item["publisher"], time_str] if p]
         st.markdown(f"[{item['title']}]({item['link']})")
