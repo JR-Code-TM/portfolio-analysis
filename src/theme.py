@@ -87,6 +87,18 @@ LIGHT_CSS = """
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
 }
 
+/* ── Selectbox ───────────────────────────────────────────────────────── */
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+}
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+}
+
 /* ── Primary buttons ────────────────────────────────────────────────── */
 button[kind="primary"] {
     background-color: #6366f1 !important;
@@ -221,6 +233,18 @@ DARK_CSS = """
 }
 [data-testid="stTextInput"] input:focus,
 [data-testid="stNumberInput"] input:focus {
+    border-color: #818cf8 !important;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15) !important;
+}
+
+/* ── Selectbox ───────────────────────────────────────────────────────── */
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    border: 1.5px solid #334155 !important;
+    border-radius: 8px !important;
+    background: #0f172a !important;
+    color: #f1f5f9 !important;
+}
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {
     border-color: #818cf8 !important;
     box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15) !important;
 }
