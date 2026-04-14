@@ -85,12 +85,15 @@ def _fmt(value: Any, fmt: str = "") -> str:
         return "N/A"
 
 
-def _time_ago(timestamp: Optional[int]) -> str:
-    """Convert a Unix timestamp to a human-readable relative string."""
-    if not timestamp:
+def _time_ago(pub_date) -> str:
+    """Convert a pubDate (ISO string or Unix timestamp) to a relative string."""
+    if not pub_date:
         return ""
     try:
-        dt = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
+        if isinstance(pub_date, str):
+            dt = datetime.datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
+        else:
+            dt = datetime.datetime.fromtimestamp(int(pub_date), tz=datetime.timezone.utc)
         delta = datetime.datetime.now(tz=datetime.timezone.utc) - dt
         days = delta.days
         if days == 0:
@@ -228,13 +231,8 @@ def _render_key_metrics(info: dict):
     pe_forward = info.get("forwardPE")
     week_low = info.get("fiftyTwoWeekLow")
     week_high = info.get("fiftyTwoWeekHigh")
-    week_range = (
-        f"${week_low:.2f} – ${week_high:.2f}"
-        if week_low and week_high
-        else "N/A"
-    )
 
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric(
         "Current Price",
         _fmt(price, "dollar"),
@@ -243,7 +241,8 @@ def _render_key_metrics(info: dict):
     c2.metric("Market Cap", _fmt(market_cap, "large"))
     c3.metric("P/E (Trailing)", _fmt(pe_trailing, "x"))
     c4.metric("Forward P/E", _fmt(pe_forward, "x"))
-    c5.metric("52-Week Range", week_range)
+    c5.metric("52W Low", _fmt(week_low, "dollar"))
+    c6.metric("52W High", _fmt(week_high, "dollar"))
 
 
 def _render_recommendation(info: dict):
@@ -401,6 +400,56 @@ def _render_price_chart(ticker: str, hist: pd.DataFrame):
         st.caption("Technical signals: " + " · ".join(signals) + ".")
 
 
+# Trusted financial news sources (matched against provider.displayName and sourceId)
+_TRUSTED_SOURCES = {
+    "bloomberg", "reuters", "bbc", "new york times", "nytimes",
+    "wall street journal", "wsj", "financial times", "ft.com",
+    "cnbc", "marketwatch", "barron", "ap news", "associated press",
+    "the economist", "economist", "forbes", "business insider",
+    "ft", "seeking alpha", "morningstar", "investopedia",
+}
+
+
+def _is_trusted(provider: dict) -> bool:
+    """Return True if the news provider is in the trusted-sources list."""
+    name = (provider.get("displayName") or "").lower()
+    source_id = (provider.get("sourceId") or "").lower()
+    return any(t in name or t in source_id for t in _TRUSTED_SOURCES)
+
+
+def _parse_news_item(item: dict) -> dict | None:
+    """Normalise a yfinance 1.2+ news item (nested under 'content') into a flat dict.
+
+    Returns None if the item lacks a title or URL.
+    """
+    content = item.get("content") or item  # fallback for older yfinance shapes
+    title = content.get("title") or ""
+    if not title:
+        return None
+
+    # Prefer clickThroughUrl (Yahoo Finance hosted link), fall back to canonicalUrl
+    click = content.get("clickThroughUrl") or {}
+    canonical = content.get("canonicalUrl") or {}
+    link = click.get("url") or canonical.get("url") or content.get("link") or "#"
+
+    provider = content.get("provider") or {}
+    publisher = provider.get("displayName") or content.get("publisher") or ""
+
+    pub_date = (
+        content.get("pubDate")
+        or content.get("displayTime")
+        or content.get("providerPublishTime")  # older shape
+    )
+
+    return {
+        "title": title,
+        "link": link,
+        "publisher": publisher,
+        "pub_date": pub_date,
+        "provider": provider,
+    }
+
+
 def _render_news(news: list[dict]):
     st.subheader("Recent News")
 
@@ -408,17 +457,29 @@ def _render_news(news: list[dict]):
         st.info("No recent news available for this ticker.")
         return
 
-    for item in news[:5]:
-        title = item.get("title") or "Untitled"
-        # yfinance news dict shape varies across versions
-        link = item.get("link") or item.get("url") or "#"
-        publisher = item.get("publisher") or item.get("source") or ""
-        pub_time = item.get("providerPublishTime")
-        time_str = _time_ago(pub_time)
+    # Parse all items and separate trusted from others
+    parsed = [p for item in news if (p := _parse_news_item(item))]
+    trusted = [p for p in parsed if _is_trusted(p["provider"])]
+    others  = [p for p in parsed if not _is_trusted(p["provider"])]
 
-        caption_parts = [p for p in [publisher, time_str] if p]
-        caption = " · ".join(caption_parts)
+    # Show up to 5 trusted items; if fewer than 5, pad with next-best sources
+    display = trusted[:5]
+    if len(display) < 5:
+        display += others[: 5 - len(display)]
 
-        st.markdown(f"[{title}]({link})")
-        if caption:
-            st.caption(caption)
+    if not display:
+        st.info("No recent news available for this ticker.")
+        return
+
+    if len(trusted) < len(display):
+        st.caption(
+            f"Showing {len(trusted)} article(s) from major outlets; "
+            f"{len(display) - len(trusted)} from other sources."
+        )
+
+    for item in display:
+        time_str = _time_ago(item["pub_date"])
+        caption_parts = [p for p in [item["publisher"], time_str] if p]
+        st.markdown(f"[{item['title']}]({item['link']})")
+        if caption_parts:
+            st.caption(" · ".join(caption_parts))
