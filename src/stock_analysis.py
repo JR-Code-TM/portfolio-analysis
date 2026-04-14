@@ -1,9 +1,8 @@
 """Stock Analysis tab — per-ticker deep-dive with financial metrics,
-analyst recommendations, price chart, and latest news.
+analyst recommendations, and price chart.
 """
 from __future__ import annotations
 
-import datetime
 from typing import Any, Optional
 
 import pandas as pd
@@ -36,14 +35,6 @@ def _fetch_history(ticker: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-
-@st.cache_data(ttl=300)
-def _fetch_news(ticker: str) -> list[dict]:
-    """Fetch latest news items; returns [] on failure."""
-    try:
-        return yf.Ticker(ticker).news or []
-    except Exception:
-        return []
 
 
 # ---------------------------------------------------------------------------
@@ -84,26 +75,6 @@ def _fmt(value: Any, fmt: str = "") -> str:
     except (TypeError, ValueError):
         return "N/A"
 
-
-def _time_ago(pub_date) -> str:
-    """Convert a pubDate (ISO string or Unix timestamp) to a relative string."""
-    if not pub_date:
-        return ""
-    try:
-        if isinstance(pub_date, str):
-            dt = datetime.datetime.fromisoformat(pub_date.replace("Z", "+00:00"))
-        else:
-            dt = datetime.datetime.fromtimestamp(int(pub_date), tz=datetime.timezone.utc)
-        delta = datetime.datetime.now(tz=datetime.timezone.utc) - dt
-        days = delta.days
-        if days == 0:
-            hours = delta.seconds // 3600
-            return f"{hours}h ago" if hours > 0 else "Just now"
-        if days == 1:
-            return "Yesterday"
-        return f"{days} days ago"
-    except Exception:
-        return ""
 
 
 def _recommendation_color(key: Optional[str]) -> str:
@@ -167,7 +138,6 @@ def _render_analysis(ticker: str):
     with st.spinner(f"Fetching data for **{ticker}**…"):
         info = _fetch_info(ticker)
         hist = _fetch_history(ticker)
-        news = _fetch_news(ticker)
 
     # Guard: detect empty / invalid ticker
     company = info.get("longName") or info.get("shortName")
@@ -187,8 +157,6 @@ def _render_analysis(ticker: str):
     _render_financial_metrics(info)
     st.divider()
     _render_price_chart(ticker, hist)
-    st.divider()
-    _render_news(news)
 
 
 # ---------------------------------------------------------------------------
@@ -397,74 +365,3 @@ def _render_price_chart(ticker: str, hist: pd.DataFrame):
         st.caption("Technical signals: " + " · ".join(signals) + ".")
 
 
-# Trusted financial news sources (matched against provider.displayName and sourceId)
-_TRUSTED_SOURCES = {
-    "bloomberg", "reuters", "bbc", "new york times", "nytimes",
-    "wall street journal", "wsj", "financial times", "ft.com",
-    "cnbc", "marketwatch", "barron", "ap news", "associated press",
-    "the economist", "economist", "forbes", "business insider",
-    "ft", "seeking alpha", "morningstar", "investopedia",
-}
-
-
-def _is_trusted(provider: dict) -> bool:
-    """Return True if the news provider is in the trusted-sources list."""
-    name = (provider.get("displayName") or "").lower()
-    source_id = (provider.get("sourceId") or "").lower()
-    return any(t in name or t in source_id for t in _TRUSTED_SOURCES)
-
-
-def _parse_news_item(item: dict) -> dict | None:
-    """Normalise a yfinance 1.2+ news item (nested under 'content') into a flat dict.
-
-    Returns None if the item lacks a title or URL.
-    """
-    content = item.get("content") or item  # fallback for older yfinance shapes
-    title = content.get("title") or ""
-    if not title:
-        return None
-
-    # Prefer clickThroughUrl (Yahoo Finance hosted link), fall back to canonicalUrl
-    click = content.get("clickThroughUrl") or {}
-    canonical = content.get("canonicalUrl") or {}
-    link = click.get("url") or canonical.get("url") or content.get("link") or "#"
-
-    provider = content.get("provider") or {}
-    publisher = provider.get("displayName") or content.get("publisher") or ""
-
-    pub_date = (
-        content.get("pubDate")
-        or content.get("displayTime")
-        or content.get("providerPublishTime")  # older shape
-    )
-
-    return {
-        "title": title,
-        "link": link,
-        "publisher": publisher,
-        "pub_date": pub_date,
-        "provider": provider,
-    }
-
-
-def _render_news(news: list[dict]):
-    st.subheader("Recent News")
-
-    if not news:
-        st.info("No recent news available for this ticker.")
-        return
-
-    # Only show items from trusted outlets — no fallback to other sources
-    parsed  = [p for item in news if (p := _parse_news_item(item))]
-    trusted = [p for p in parsed if _is_trusted(p["provider"])][:5]
-
-    if not trusted:
-        st.info("No recent news from major financial outlets (Bloomberg, Reuters, WSJ, etc.) available for this ticker.")
-        return
-
-    for item in trusted:
-        time_str = _time_ago(item["pub_date"])
-        caption_parts = [p for p in [item["publisher"], time_str] if p]
-        st.markdown(f"[{item['title']}]({item['link']})")
-        if caption_parts:
-            st.caption(" · ".join(caption_parts))
