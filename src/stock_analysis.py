@@ -20,21 +20,64 @@ from src.market_data import fetch_etf_holdings, fetch_ticker_info as _fetch_tick
 
 @st.cache_data(ttl=300)
 def _fetch_info(ticker: str) -> dict:
-    """Fetch yf.Ticker(ticker).info dict; returns {} on any failure."""
+    """Fetch yf.Ticker(ticker).info, patched with fast_info for key price fields.
+
+    On Streamlit Cloud, .info may be throttled and return only corporate metadata
+    (missing currentPrice, marketCap, 52W range etc.). fast_info uses a lighter
+    endpoint and fills those gaps reliably.
+    """
+    t = yf.Ticker(ticker)
+
     try:
-        return yf.Ticker(ticker).info or {}
+        info = dict(t.info or {})
     except Exception:
-        return {}
+        info = {}
+
+    # Patch missing price/market fields from fast_info
+    try:
+        fi = t.fast_info
+        patches = {
+            "currentPrice":       getattr(fi, "last_price",   None),
+            "regularMarketPrice": getattr(fi, "last_price",   None),
+            "fiftyTwoWeekHigh":   getattr(fi, "year_high",    None),
+            "fiftyTwoWeekLow":    getattr(fi, "year_low",     None),
+            "marketCap":          getattr(fi, "market_cap",   None),
+            "volume":             getattr(fi, "last_volume",  None),
+            "previousClose":      getattr(fi, "previous_close", None),
+        }
+        for k, v in patches.items():
+            if info.get(k) is None and v is not None:
+                info[k] = v
+    except Exception:
+        pass
+
+    return info
 
 
 @st.cache_data(ttl=300)
 def _fetch_history(ticker: str) -> pd.DataFrame:
-    """Fetch 1-year OHLCV DataFrame; returns empty DataFrame on failure."""
+    """Fetch 1-year OHLCV DataFrame with yf.download fallback.
+
+    Tier 1: Ticker.history — preferred (returns clean OHLCV).
+    Tier 2: yf.download — different Yahoo endpoint, more cloud-resilient.
+    """
+    # Tier 1
     try:
         df = yf.Ticker(ticker).history(period="1y")
-        return df if not df.empty else pd.DataFrame()
+        if not df.empty:
+            return df
     except Exception:
-        return pd.DataFrame()
+        pass
+
+    # Tier 2
+    try:
+        df = yf.download(ticker, period="1y", progress=False, auto_adjust=True)
+        if not df.empty:
+            return df
+    except Exception:
+        pass
+
+    return pd.DataFrame()
 
 
 

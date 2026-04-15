@@ -78,41 +78,68 @@ def _generate_synthetic(ticker: str, period: str = "1y") -> pd.Series:
 # ---------------------------------------------------------------------------
 
 def fetch_ticker_info(ticker: str) -> dict:
-    """Fetch company info from yfinance. Caching is done by the caller via
-    st.session_state.ticker_info_cache to persist across reruns."""
+    """Fetch company info from yfinance with three-tier fallback.
+
+    Tier 1 — .info: most complete but can be throttled on cloud IPs.
+    Tier 2 — fast_info: lighter endpoint, more resilient to rate-limits.
+    Tier 3 — yf.download: different Yahoo endpoint, last resort for price.
+
+    Each tier runs in its own try/except so a failure in Tier 1 never
+    prevents Tier 2 or 3 from being attempted.
+    """
+    info: dict = {}
+    price = None
+    company_name = None
+    is_etf = False
+    t = yf.Ticker(ticker)
+
+    # Tier 1: full .info dict
     try:
-        t = yf.Ticker(ticker)
-        info = t.info
-        quote_type = info.get("quoteType", "")
-        is_etf = quote_type.upper() == "ETF"
+        info = t.info or {}
+        is_etf = info.get("quoteType", "").upper() == "ETF"
+        company_name = info.get("longName") or info.get("shortName")
         price = (
             info.get("currentPrice")
             or info.get("regularMarketPrice")
             or info.get("navPrice")
         )
-        # Fallback: fast_info.last_price is lighter and often available when
-        # .info price fields are None (e.g. pre/post-market or rate-limit)
-        if price is None:
-            try:
-                fi = t.fast_info
-                price = getattr(fi, "last_price", None) or getattr(fi, "lastPrice", None)
-            except Exception:
-                pass
-        return {
-            "company_name": info.get("longName") or info.get("shortName"),
-            "sector": info.get("sector"),
-            "country": info.get("country"),
-            "price": float(price) if price else None,
-            "is_etf": is_etf,
-        }
     except Exception:
-        return {
-            "company_name": None,
-            "sector": None,
-            "country": None,
-            "price": None,
-            "is_etf": False,
-        }
+        pass
+
+    # Tier 2: fast_info — lighter, survives cloud throttling
+    if price is None:
+        try:
+            fi = t.fast_info
+            price = getattr(fi, "last_price", None) or getattr(fi, "lastPrice", None)
+        except Exception:
+            pass
+
+    # Tier 3: yf.download — different Yahoo endpoint, last resort
+    if price is None:
+        try:
+            hist = yf.download(ticker, period="5d", progress=False, auto_adjust=True)
+            if not hist.empty:
+                close = hist["Close"]
+                if isinstance(close, pd.DataFrame):
+                    close = close.iloc[:, 0]
+                last = close.dropna()
+                if not last.empty:
+                    price = float(last.iloc[-1])
+        except Exception:
+            pass
+
+    # If price resolved but name still missing, ticker symbol is a valid fallback
+    # (a resolvable price proves the ticker exists)
+    if not company_name and price:
+        company_name = ticker
+
+    return {
+        "company_name": company_name,
+        "sector": info.get("sector"),
+        "country": info.get("country"),
+        "price": float(price) if price else None,
+        "is_etf": is_etf,
+    }
 
 
 def get_ticker_info_cached(ticker: str) -> dict:
