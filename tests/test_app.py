@@ -165,6 +165,41 @@ def test_csv_import():
 
 
 # ---------------------------------------------------------------------------
+# Cloud-resilience tests (simulate .info failure scenarios)
+# ---------------------------------------------------------------------------
+
+def test_fast_info_resilience():
+    """fast_info must provide price independently of .info."""
+    section("Cloud resilience — fast_info fallback (AAPL)")
+    fi = yf.Ticker("AAPL").fast_info
+    price = getattr(fi, "last_price", None)
+    check("fast_info.last_price available", price is not None, str(price))
+    check("fast_info.last_price > 0",       (price or 0) > 0,  str(price))
+    hi = getattr(fi, "year_high", None)
+    lo = getattr(fi, "year_low",  None)
+    check("fast_info year_high available",  hi is not None, str(hi))
+    check("fast_info year_low available",   lo is not None, str(lo))
+
+
+def test_download_fallback():
+    """yf.download must return 1y history as a fallback endpoint."""
+    section("Cloud resilience — yf.download fallback (AAPL)")
+    df = yf.download("AAPL", period="1y", progress=False, auto_adjust=True)
+    check("download non-empty",     not df.empty,         f"{len(df)} rows")
+    check("download has Close col", "Close" in df.columns)
+    check("download >= 200 rows",   len(df) >= 200,       f"{len(df)} rows")
+
+
+def test_fetch_ticker_info_tiers():
+    """fetch_ticker_info must resolve price via at least one tier."""
+    section("Cloud resilience — three-tier fetch_ticker_info")
+    for ticker in ["AAPL", "VOO", "MSFT"]:
+        info = fetch_ticker_info(ticker)
+        check(f"{ticker}: price resolved",       (info.get("price") or 0) > 0,   str(info.get("price")))
+        check(f"{ticker}: company_name present", info.get("company_name") is not None, str(info.get("company_name")))
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -180,6 +215,10 @@ if __name__ == "__main__":
     test_history()
     test_holdings_names_no_session_state()
     test_csv_import()
+    print("\n--- Cloud Resilience ---")
+    test_fast_info_resilience()
+    test_download_fallback()
+    test_fetch_ticker_info_tiers()
 
     print(f"\n{'═' * 62}")
     total   = sum(1 for line in open(__file__).readlines() if "check(" in line)
